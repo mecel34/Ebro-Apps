@@ -1,0 +1,183 @@
+
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>QR Kod Oluşturucu</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  font-family:Arial, sans-serif;
+  background:#f2f2f2;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  height:100vh;
+}
+.container{
+  background:#fff;
+  padding:20px;
+  width:430px;
+  border-radius:10px;
+  text-align:center;
+}
+select,input,textarea,button{
+  width:100%;
+  padding:10px;
+  margin-top:10px;
+  box-sizing:border-box;
+}
+textarea{height:80px;resize:vertical;}
+canvas{
+  display:block;
+  margin:20px auto 0;
+}
+.footer{
+  margin-top:15px;
+  font-size:13px;
+  color:#888;
+  text-align:center;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+  <h3>QR Kod Oluşturucu</h3>
+
+  <select id="type" onchange="guncelleAlanlar()">
+    <option value="text">Metin / URL</option>
+    <option value="tel">Telefon</option>
+    <option value="sms">SMS</option>
+    <option value="mail">E-posta</option>
+    <option value="wifi">Wi-Fi</option>
+    <option value="geo">Konum</option>
+  </select>
+
+  <input id="target" placeholder="Metin / URL / E Posta / Tel. No.">
+  <textarea id="message" placeholder="Mesaj"></textarea>
+
+  <input id="wifiName" placeholder="Wi-Fi Adı (SSID)">
+  <input id="wifiPass" placeholder="Wi-Fi Şifresi">
+
+  <input id="lat" placeholder="Enlem (xx.xxxxxx)">
+  <input id="lng" placeholder="Boylam (xx.xxxxxx)">
+
+  <!-- Konum al butonu -->
+  <button id="konumBtn" type="button" onclick="konumAl()">📍 Konumumu Al</button>
+
+  <input type="file" id="logoInput" accept="image/png,image/jpeg">
+
+  <button onclick="olustur()">QR Oluştur</button>
+  <button onclick="indir()">PNG Olarak İndir</button>
+
+  <canvas id="canvas" width="300" height="300"></canvas>
+
+  <div class="footer">Bu Site Verilerinizi Kullanmaz Veya Satmaz</div>
+</div>
+
+<!-- QRCode.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+<!-- 🔑 TÜRKÇE KARAKTER DESTEĞİ -->
+<script>
+QRCode.stringToBytes = QRCode.stringToBytesFuncs["UTF-8"];
+</script>
+
+<script>
+const DISPLAY=300, SCALE=8, EXPORT=DISPLAY*SCALE;
+let logoImg=null;
+
+logoInput.onchange=e=>{
+  const f=e.target.files[0];
+  if(!f)return;
+  logoImg=new Image();
+  logoImg.src=URL.createObjectURL(f);
+};
+
+function guncelleAlanlar(){
+  const t=type.value;
+  ["target","message","wifiName","wifiPass","lat","lng","konumBtn"]
+    .forEach(id=>document.getElementById(id).style.display="none");
+
+  if(t==="text"||t==="tel") target.style.display="block";
+  if(t==="sms"||t==="mail"){target.style.display="block";message.style.display="block";}
+  if(t==="wifi"){wifiName.style.display="block";wifiPass.style.display="block";}
+  if(t==="geo"){
+    lat.style.display="block";
+    lng.style.display="block";
+    konumBtn.style.display="block";
+  }
+}
+guncelleAlanlar();
+
+function hazirlaQR(){
+  if(type.value==="tel") return "tel:"+target.value;
+  if(type.value==="sms") return "sms:"+target.value+"?body="+encodeURIComponent(message.value);
+  if(type.value==="mail") return "mailto:"+target.value+"?body="+encodeURIComponent(message.value);
+  if(type.value==="wifi") return `WIFI:T:WPA;S:${wifiName.value};P:${wifiPass.value};;`;
+  if(type.value==="geo") return `https://maps.google.com/?q=${lat.value},${lng.value}`;
+  return message.value?target.value+"\n"+message.value:target.value;
+}
+
+/* Konum al */
+function konumAl(){
+  if(!navigator.geolocation){
+    alert("Tarayıcı konum desteklemiyor");
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    pos=>{
+      lat.value = pos.coords.latitude.toFixed(6);
+      lng.value = pos.coords.longitude.toFixed(6);
+    },
+    ()=>alert("Konum alınamadı"),
+    { enableHighAccuracy:true, timeout:10000 }
+  );
+}
+
+function olustur(){
+  const text=hazirlaQR();
+  if(!text) return alert("Alanları doldur");
+
+  const c=canvas.getContext("2d");
+  c.clearRect(0,0,DISPLAY,DISPLAY);
+
+  const tmp=document.createElement("div");
+  new QRCode(tmp,{text,width:DISPLAY,height:DISPLAY,correctLevel:QRCode.CorrectLevel.H});
+
+  setTimeout(()=>{
+    const img=tmp.querySelector("img");
+    const exp=document.createElement("canvas");
+    exp.width=EXPORT; exp.height=EXPORT;
+    const e=exp.getContext("2d");
+    e.imageSmoothingEnabled=false;
+    e.drawImage(img,0,0,EXPORT,EXPORT);
+
+    if(logoImg){
+      const s=EXPORT*0.22;
+      const x=(EXPORT-s)/2, y=(EXPORT-s)/2;
+      e.fillStyle="#fff";
+      e.fillRect(x-30,y-30,s+60,s+60);
+      e.drawImage(logoImg,x,y,s,s);
+    }
+
+    c.imageSmoothingEnabled=false;
+    c.drawImage(exp,0,0,DISPLAY,DISPLAY);
+    canvas._exp=exp;
+  },80);
+}
+
+function indir(){
+  if(!canvas._exp) return alert("Önce QR oluştur");
+  const a=document.createElement("a");
+  a.download="QR Kod.png";
+  a.href=canvas._exp.toDataURL("image/png");
+  a.click();
+}
+</script>
+
+</body>
+</html>
